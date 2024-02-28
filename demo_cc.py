@@ -176,7 +176,7 @@ def run(cfg,
      
     # Visualize
     if visualize:
-        from lib.vis.run_vis import run_vis_on_demo
+        from lib.vis.run_vis_cc import run_vis_on_demo
         with torch.no_grad():
             run_vis_on_demo(cfg, video, results, output_pth, network.smpl, vis_global=run_global)
         
