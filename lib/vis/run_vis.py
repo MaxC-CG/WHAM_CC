@@ -44,14 +44,14 @@ def run_vis_on_demo(cfg, video, results, output_pth, smpl, vis_global=True):
         global_R, global_T, global_lights = get_global_cameras(verts_glob, cfg.DEVICE)
 
         # Define camera rotations for top, front, and side views
-        top_view_rotation = torch.tensor(R.from_euler('x', -90, degrees=True).as_matrix())
-        front_view_rotation = torch.eye(3)
-        side_view_rotation = torch.tensor(R.from_euler('y', 90, degrees=True).as_matrix())
+        top_view_rotation = torch.tensor(R.from_euler('xyz', [-90, 0, 180], degrees=True).as_matrix())
+        front_view_rotation = torch.tensor(R.from_euler('y', 180, degrees=True).as_matrix())  # Rotate 180 degrees around y-axis to look from behind
+        side_view_rotation = torch.tensor(R.from_euler('y', -90, degrees=True).as_matrix())  
 
         # Define custom translation matrices for top, front, and side views
-        translation_top = torch.tensor([0, 0, 4])  # Move camera up along z-axis
-        translation_front = torch.tensor([0, 4, 0])  # Move camera back along y-axis
-        translation_side = torch.tensor([-4, 0, 0])  # Move camera right along x-axis
+        translation_top = torch.tensor([0, 0, 5])  # Move camera up along z-axis
+        translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
+        translation_side = torch.tensor([0, -1, 5])  # Move camera right along x-axis
     
     # build default camera
     default_R, default_T = torch.eye(3), torch.zeros(3)
@@ -88,11 +88,15 @@ def run_vis_on_demo(cfg, video, results, output_pth, smpl, vis_global=True):
                 keypoints = val['keypoints'][frame_i2].reshape(-1, 3)
                 contact_probs = val['contact'][frame_i2]
                 max_contact_idx = np.argmax(contact_probs)  # Index of the foot keypoint with the highest contact probability
+                left_foot_prob = contact_probs[0] + contact_probs[1]  # Sum of the first two values for left foot probability
+                right_foot_prob = contact_probs[2] + contact_probs[3]  # Sum of the last two values for right foot probability
 
                 for idx, joint in enumerate(keypoints):
                     x, y, confidence = joint
                     radius = int(max(1, confidence * 20))  # Scale the radius based on confidence
-                    color = (0, 255, 0) if idx in [22, 23, 24, 25] and idx == max_contact_idx + 22 else (255, 0, 0)  # Use green for the keypoint with the highest contact probability, red otherwise
+                    # color = (0, 255, 0) if idx in [20, 21, 22, 23] and idx == max_contact_idx + 20 else (255, 0, 0)  # Use green for the keypoint with the highest contact probability, red otherwise
+                    # cv2.circle(img_keypoints, (int(x), int(y)), radius, color, -1)  # Draw the circle
+                    color = (0, 255, 0) if idx == 15 and left_foot_prob > right_foot_prob else (0, 255, 0) if idx == 16 and right_foot_prob > left_foot_prob else (255, 0, 0)
                     cv2.circle(img_keypoints, (int(x), int(y)), radius, color, -1)  # Draw the circle
 
         # Render global views
@@ -125,8 +129,8 @@ def run_vis_on_demo(cfg, video, results, output_pth, smpl, vis_global=True):
                 img_glob = np.ones_like(img_original) * 255
 
             # Concatenate all views in a 3x2 layout
-            top_row = np.concatenate([img_top, img_front, img_side], axis=1)
-            bottom_row = np.concatenate([img_original, img_keypoints, img_overlaid], axis=1)
+            top_row = np.concatenate([img_original, img_keypoints, img_top], axis=1)
+            bottom_row = np.concatenate([img_overlaid, img_side, img_front], axis=1)
             final_img = np.concatenate([top_row, bottom_row], axis=0)
         else:
             final_img = img_original  # If not vis_global, just use the original image
