@@ -1,11 +1,12 @@
 import os
 import os.path as osp
+
 import cv2
 import torch
 import imageio
 import numpy as np
 from progress.bar import Bar
-from scipy.spatial.transform import Rotation as R
+
 from lib.vis.renderer import Renderer, get_global_cameras
 
 def run_vis_on_demo(cfg, video, results, output_pth, smpl, vis_global=True):
@@ -15,7 +16,7 @@ def run_vis_on_demo(cfg, video, results, output_pth, smpl, vis_global=True):
     cap = cv2.VideoCapture(video)
     fps = cap.get(cv2.CAP_PROP_FPS)
     length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    width, height = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    width, height = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
     
     # create renderer with cliff focal length estimation
     focal_length = (width ** 2 + height ** 2) ** 0.5
@@ -42,101 +43,50 @@ def run_vis_on_demo(cfg, video, results, output_pth, smpl, vis_global=True):
         
         # build global camera
         global_R, global_T, global_lights = get_global_cameras(verts_glob, cfg.DEVICE)
-
-        # Define camera rotations for top, front, and side views
-        top_view_rotation = torch.tensor(R.from_euler('xyz', [-90, 0, 180], degrees=True).as_matrix())
-        front_view_rotation = torch.tensor(R.from_euler('y', 180, degrees=True).as_matrix())  # Rotate 180 degrees around y-axis to look from behind
-        side_view_rotation = torch.tensor(R.from_euler('y', -90, degrees=True).as_matrix())  
-
-        # Define custom translation matrices for top, front, and side views
-        translation_top = torch.tensor([0, 0, 5])  # Move camera up along z-axis
-        translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
-        translation_side = torch.tensor([0, -1, 5])  # Move camera right along x-axis
     
     # build default camera
     default_R, default_T = torch.eye(3), torch.zeros(3)
     
     writer = imageio.get_writer(
         osp.join(output_pth, 'output.mp4'), 
-        fps=fps, mode='I', format='FFMPEG', macro_block_size=1,
-        codec='libx264', bitrate='16M',
-        ffmpeg_params=['-vf', f'scale={width * 3}:{height * 2}']
+        fps=fps, mode='I', format='FFMPEG', macro_block_size=1
     )
     bar = Bar('Rendering results ...', fill='#', max=length)
-
+    
     frame_i = 0
     _global_R, _global_T = None, None
     # run rendering
     while (cap.isOpened()):
         flag, org_img = cap.read()
         if not flag: break
-        img_original = org_img[..., ::-1].copy()
-        img_keypoints = img_original.copy()
-
-        # Render 3D mesh onto the original image
-        img_overlaid = img_original.copy()
+        img = org_img[..., ::-1].copy()
+        
+        # render onto the input video
         renderer.create_camera(default_R, default_T)
         for _id, val in results.items():
-            # Render onto the image
+            # render onto the image
             frame_i2 = np.where(val['frame_ids'] == frame_i)[0]
             if len(frame_i2) == 0: continue
             frame_i2 = frame_i2[0]
-            img_overlaid = renderer.render_mesh(torch.from_numpy(val['verts'][frame_i2]).to(cfg.DEVICE), img_overlaid)
-
-            # Draw keypoints on the image
-            if 'keypoints' in val and 'contact' in val:
-                keypoints = val['keypoints'][frame_i2].reshape(-1, 3)
-                contact_probs = val['contact'][frame_i2]
-                max_contact_idx = np.argmax(contact_probs)  # Index of the foot keypoint with the highest contact probability
-                left_foot_prob = contact_probs[0] + contact_probs[1]  # Sum of the first two values for left foot probability
-                right_foot_prob = contact_probs[2] + contact_probs[3]  # Sum of the last two values for right foot probability
-
-                for idx, joint in enumerate(keypoints):
-                    x, y, confidence = joint
-                    radius = int(max(1, confidence * 20))  # Scale the radius based on confidence
-                    # color = (0, 255, 0) if idx in [20, 21, 22, 23] and idx == max_contact_idx + 20 else (255, 0, 0)  # Use green for the keypoint with the highest contact probability, red otherwise
-                    # cv2.circle(img_keypoints, (int(x), int(y)), radius, color, -1)  # Draw the circle
-                    color = (0, 255, 0) if idx == 15 and left_foot_prob > right_foot_prob else (0, 255, 0) if idx == 16 and right_foot_prob > left_foot_prob else (255, 0, 0)
-                    cv2.circle(img_keypoints, (int(x), int(y)), radius, color, -1)  # Draw the circle
-
-        # Render global views
+            img = renderer.render_mesh(torch.from_numpy(val['verts'][frame_i2]).to(cfg.DEVICE), img)
+        
         if vis_global:
-            # Render the global coordinate
+            # render the global coordinate
             if frame_i in results[sid]['frame_ids']:
                 frame_i3 = np.where(results[sid]['frame_ids'] == frame_i)[0]
                 verts = verts_glob[[frame_i3]].to(cfg.DEVICE)
                 faces = renderer.faces.clone().squeeze(0)
                 colors = torch.ones((1, 4)).float().to(cfg.DEVICE); colors[..., :3] *= 0.9
-
+                
                 if _global_R is None:
                     _global_R = global_R[frame_i3].clone(); _global_T = global_T[frame_i3].clone()
                 cameras = renderer.create_camera(global_R[frame_i3], global_T[frame_i3])
                 img_glob = renderer.render_with_ground(verts, faces, colors, cameras, global_lights)
-                
-                # Render top, front, and side views using render_with_ground
-                camera_top = renderer.create_camera(top_view_rotation, translation_top)
-                img_top = renderer.render_with_ground(verts, faces, colors, camera_top, global_lights)
-
-                camera_front = renderer.create_camera(front_view_rotation, translation_front)
-                img_front = renderer.render_with_ground(verts, faces, colors, camera_front, global_lights)
-
-                camera_side = renderer.create_camera(side_view_rotation, translation_side)
-                img_side = renderer.render_with_ground(verts, faces, colors, camera_side, global_lights)
-            else:
-                img_top = np.ones_like(img_original) * 255
-                img_front = np.ones_like(img_original) * 255
-                img_side = np.ones_like(img_original) * 255
-                img_glob = np.ones_like(img_original) * 255
-
-            # Concatenate all views in a 3x2 layout
-            top_row = np.concatenate([img_original, img_keypoints, img_top], axis=1)
-            bottom_row = np.concatenate([img_overlaid, img_side, img_front], axis=1)
-            final_img = np.concatenate([top_row, bottom_row], axis=0)
-        else:
-            final_img = img_original  # If not vis_global, just use the original image
-
-        writer.append_data(final_img)
+            
+            try: img = np.concatenate((img, img_glob), axis=1)
+            except: img = np.concatenate((img, np.ones_like(img) * 255), axis=1)
+        
+        writer.append_data(img)
         bar.next()
         frame_i += 1
-
     writer.close()
