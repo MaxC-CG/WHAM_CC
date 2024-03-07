@@ -137,6 +137,20 @@ def run(cfg,
                 
                 # inference
                 pred = network(x, inits, features, mask=mask, init_root=init_root, cam_angvel=cam_angvel, return_y_up=True, **kwargs)
+
+        pred_body_pose_before= matrix_to_axis_angle(pred['poses_body']).cpu().numpy().reshape(-1, 69)
+        pred_root_before= matrix_to_axis_angle(pred['poses_root_cam']).cpu().numpy().reshape(-1, 3)
+        pred_root_world_before= matrix_to_axis_angle(pred['poses_root_world']).cpu().numpy().reshape(-1, 3)
+        pred_pose_before= np.concatenate((pred_root_before, pred_body_pose_before), axis=-1)
+        pred_pose_world_before= np.concatenate((pred_root_world_before, pred_body_pose_before), axis=-1)
+        pred_trans_before= (pred['trans_cam'] - network.output.offset).cpu().numpy()
+        
+        results[_id]['pose_before'] = pred_pose_before
+        results[_id]['trans_before'] = pred_trans_before
+        results[_id]['pose_world_before'] = pred_pose_world_before
+        results[_id]['trans_world_before'] = pred['trans_world'].cpu().squeeze(0).numpy()
+        results[_id]['betas_before'] = pred['betas'].cpu().squeeze(0).numpy()
+        results[_id]['verts_before'] = (pred['verts_cam'] + pred['trans_cam'].unsqueeze(1)).cpu().numpy()        
         
         # if False:
         if args.run_smplify:
@@ -152,23 +166,25 @@ def run(cfg,
                 pred = network.refine_trajectory(output, cam_angvel, return_y_up=True)
         
         # ========= Store results ========= #
-        pred_body_pose = matrix_to_axis_angle(pred['poses_body']).cpu().numpy().reshape(-1, 69)
-        pred_root = matrix_to_axis_angle(pred['poses_root_cam']).cpu().numpy().reshape(-1, 3)
-        pred_root_world = matrix_to_axis_angle(pred['poses_root_world']).cpu().numpy().reshape(-1, 3)
-        pred_pose = np.concatenate((pred_root, pred_body_pose), axis=-1)
-        pred_pose_world = np.concatenate((pred_root_world, pred_body_pose), axis=-1)
-        pred_trans = (pred['trans_cam'] - network.output.offset).cpu().numpy()
-        pred_contact = pred['contact'].cpu().squeeze().numpy()
-        pred_keypoints = tracking_results[0]['keypoints']
+        pred_body_pose_after = matrix_to_axis_angle(pred['poses_body']).cpu().numpy().reshape(-1, 69)
+        pred_root_after = matrix_to_axis_angle(pred['poses_root_cam']).cpu().numpy().reshape(-1, 3)
+        pred_root_world_after = matrix_to_axis_angle(pred['poses_root_world']).cpu().numpy().reshape(-1, 3)
+        pred_pose_after = np.concatenate((pred_root_after, pred_body_pose_after), axis=-1)
+        pred_pose_world_after = np.concatenate((pred_root_world_after, pred_body_pose_after), axis=-1)
+        pred_trans_after = (pred['trans_cam'] - network.output.offset).cpu().numpy()
         
+        pred_contact = pred['contact'].cpu().squeeze().numpy()
+        pred_keypoints = tracking_results[_id]['keypoints']
+        
+        results[_id]['pose_after'] = pred_pose_after
+        results[_id]['trans_after'] = pred_trans_after
+        results[_id]['pose_world_after'] = pred_pose_world_after
+        results[_id]['trans_world_after'] = pred['trans_world'].cpu().squeeze(0).numpy()
+        results[_id]['betas_after'] = pred['betas'].cpu().squeeze(0).numpy()
+        results[_id]['verts_after'] = (pred['verts_cam'] + pred['trans_cam'].unsqueeze(1)).cpu().numpy()
+
         results[_id]['contact'] = pred_contact
         results[_id]['keypoints'] = pred_keypoints
-        results[_id]['pose'] = pred_pose
-        results[_id]['trans'] = pred_trans
-        results[_id]['pose_world'] = pred_pose_world
-        results[_id]['trans_world'] = pred['trans_world'].cpu().squeeze(0).numpy()
-        results[_id]['betas'] = pred['betas'].cpu().squeeze(0).numpy()
-        results[_id]['verts'] = (pred['verts_cam'] + pred['trans_cam'].unsqueeze(1)).cpu().numpy()
         results[_id]['frame_ids'] = frame_id
     
     if save_pkl:
