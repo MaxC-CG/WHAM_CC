@@ -144,7 +144,8 @@ def run(cfg,
         pred_pose_before= np.concatenate((pred_root_before, pred_body_pose_before), axis=-1)
         pred_pose_world_before= np.concatenate((pred_root_world_before, pred_body_pose_before), axis=-1)
         pred_trans_before= (pred['trans_cam'] - network.output.offset).cpu().numpy()
-        
+
+        smpl_before = network.smpl
         results[_id]['pose_before'] = pred_pose_before
         results[_id]['trans_before'] = pred_trans_before
         results[_id]['pose_world_before'] = pred_pose_world_before
@@ -192,9 +193,14 @@ def run(cfg,
      
     # Visualize
     if visualize:
-        from lib.vis.run_vis_cc import run_vis_on_demo
-        with torch.no_grad():
-            run_vis_on_demo(cfg, video, results, output_pth, network.smpl, vis_global=run_global)
+        if args.run_smplify:
+            from lib.vis.run_vis_cc import run_vis_on_demo_smplify
+            with torch.no_grad():
+                run_vis_on_demo_smplify(cfg, video, results, output_pth, smpl_before, network.smpl, vis_global=run_global)
+        else:
+            from lib.vis.run_vis_cc import run_vis_on_demo
+            with torch.no_grad():
+                run_vis_on_demo(cfg, video, results, output_pth, network.smpl, vis_global=run_global)
         
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
