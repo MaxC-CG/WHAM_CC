@@ -38,7 +38,8 @@ def run(cfg,
         run_global=True,
         save_pkl=False,
         visualize=False):
-    
+
+    network_rtm = copy.deepcopy(network)
     cap = cv2.VideoCapture(video)
     assert cap.isOpened(), f'Faild to load video file {video}'
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -96,7 +97,7 @@ def run(cfg,
             tracking_results = joblib.load(osp.join(output_pth, 'tracking_results.pth'))
             slam_results = joblib.load(osp.join(output_pth, 'slam_results.pth'))
             logger.info(f'Already processed data exists at {output_pth} ! Load the data .')
-
+            
     # Build dataset
     dataset = CustomDataset(cfg, tracking_results, slam_results, width, height, fps)
     
@@ -148,6 +149,9 @@ def run(cfg,
         pred_pose_world_before= np.concatenate((pred_root_world_before, pred_body_pose_before), axis=-1)
         pred_trans_before= (pred['trans_cam'] - network.output.offset).cpu().numpy()
 
+        pred_contact = pred['contact'].cpu().squeeze().numpy()
+        pred_keypoints = tracking_results[_id]['keypoints']
+
         smpl_before = copy.deepcopy(network.smpl)
         pred_before = copy.deepcopy(pred)
         network_before = copy.deepcopy(network)
@@ -156,25 +160,76 @@ def run(cfg,
         results[_id]['pose_world_before'] = pred_pose_world_before
         results[_id]['trans_world_before'] = pred['trans_world'].cpu().squeeze(0).numpy()
         results[_id]['betas_before'] = pred['betas'].cpu().squeeze(0).numpy()
-        results[_id]['verts_before'] = (pred['verts_cam'] + pred['trans_cam'].unsqueeze(1)).cpu().numpy()        
+        results[_id]['verts_before'] = (pred['verts_cam'] + pred['trans_cam'].unsqueeze(1)).cpu().numpy()       
+
+        results[_id]['contact'] = pred_contact
+        results[_id]['keypoints'] = pred_keypoints
+        results[_id]['frame_ids'] = frame_id
         
         # if False:
         if args.run_smplify_rtm:
-            smplify = TemporalSMPLify(network_before.smpl, img_w=width, img_h=height, device=cfg.DEVICE)
-            with open(rtm_pre, 'r') as f:
-              data = json.load(f)
+            tracking_results_rtm = 
+            
+            # Build dataset
+            dataset_rtm = CustomDataset(cfg, tracking_results_rtm, slam_results, width, height, fps)
+            
+            # run WHAM
+            # results_rtm = defaultdict(dict)
+            
+            n_subjs_rtm = len(dataset_rtm)
+            for subj in range(n_subjs_rtm):
+        
+                with torch.no_grad():
+                    if cfg.FLIP_EVAL:
+                        # Forward pass with flipped input
+                        flipped_batch_rtm = dataset_rtm.load_data(subj, True)
+                        _id, x, inits, features, mask, init_root, cam_angvel, frame_id, kwargs = flipped_batch_rtm
+                        flipped_pred_rtm = network_rtm(x, inits, features, mask=mask, init_root=init_root, cam_angvel=cam_angvel, return_y_up=True, **kwargs)
+                        
+                        # Forward pass with normal input
+                        batch_rtm = dataset_rtm.load_data(subj)
+                        _id, x, inits, features, mask, init_root, cam_angvel, frame_id, kwargs = batch
+                        pred_rtm = network_rtm(x, inits, features, mask=mask, init_root=init_root, cam_angvel=cam_angvel, return_y_up=True, **kwargs)
+                        
+                        # Merge two predictions
+                        flipped_pose_rtm, flipped_shape_rtm = flipped_pred_rtm['pose'].squeeze(0), flipped_pred_rtm['betas'].squeeze(0)
+                        pose_rtm, shape_rtm = pred_rtm['pose'].squeeze(0), pred_rtm['betas'].squeeze(0)
+                        flipped_pose_rtm, pose_rtm = flipped_pose_rtm.reshape(-1, 24, 6), pose_rtm.reshape(-1, 24, 6)
+                        avg_pose_rtm, avg_shape_rtm = avg_preds(pose_rtm, shape_rtm, flipped_pose_rtm, flipped_shape_rtm)
+                        avg_pose_rtm = avg_pose_rtm.reshape(-1, 144)
+                        avg_contact_rtm = (flipped_pred_rtm['contact'][..., [2, 3, 0, 1]] + pred_rtm['contact']) / 2
+                        
+                        # Refine trajectory with merged prediction
+                        network_rtm.pred_pose = avg_pose.view_as(network_rtm.pred_pose)
+                        network_rtm.pred_shape = avg_shape.view_as(network_rtm.pred_shape)
+                        network_rtm.pred_contact = avg_contact.view_as(network_rtm.pred_contact)
+                        output_rtm = network_rtm.forward_smpl(**kwargs)
+                        pred_rtm = network_rtm.refine_trajectory(output_rtm, cam_angvel, return_y_up=True)
+                    
+                    else:
+                        # data
+                        batch_rtm = dataset_rtm.load_data(subj)
+                        _id, x, inits, features, mask, init_root, cam_angvel, frame_id, kwargs = batch
+                        
+                        # inference
+                        pred_rtm = network_rtm(x, inits, features, mask=mask, init_root=init_root, cam_angvel=cam_angvel, return_y_up=True, **kwargs)
+            
+            # smplify = TemporalSMPLify(network_before.smpl, img_w=width, img_h=height, device=cfg.DEVICE)
+            smplify = TemporalSMPLify(network_rtm.smpl, img_w=width, img_h=height, device=cfg.DEVICE)
+            # with open(rtm_pre, 'r') as f:
+            #   data = json.load(f)
 
-            def select_keypoints_with_highest_confidence(instances):
-              highest_confidence = 0
-              selected_keypoints = None
-              selected_scores = None
-              for instance in instances:
-                total_confidence = sum(instance['keypoint_scores'])
-                if total_confidence > highest_confidence:
-                  highest_confidence = total_confidence
-                  selected_keypoints = instance['keypoints']
-                  selected_scores = instance['keypoint_scores']
-              return selected_keypoints, selected_scores
+            # def select_keypoints_with_highest_confidence(instances):
+            #   highest_confidence = 0
+            #   selected_keypoints = None
+            #   selected_scores = None
+            #   for instance in instances:
+            #     total_confidence = sum(instance['keypoint_scores'])
+            #     if total_confidence > highest_confidence:
+            #       highest_confidence = total_confidence
+            #       selected_keypoints = instance['keypoints']
+            #       selected_scores = instance['keypoint_scores']
+            #   return selected_keypoints, selected_scores
             # formatted_data = [
             #   [
             #     [keypoint[0], keypoint[1], score]
@@ -184,18 +239,18 @@ def run(cfg,
             #   for instance in frame['instances']
             # ]
             # 提取并处理关键点数据
-            formatted_data = []
-            for frame in data:
-              # 检查 'instances' 是否非空
-              if frame['instances']:
-                # 选择置信度最高的关键点组及其对应的置信度分数
-                selected_keypoints, selected_scores = select_keypoints_with_highest_confidence(frame['instances'])
-                # 格式化关键点数据
-                keypoints = [
-                    [keypoint[0], keypoint[1], score]
-                    for keypoint, score in zip(selected_keypoints, selected_scores)
-                ]
-                formatted_data.append(keypoints)
+            # formatted_data = []
+            # for frame in data:
+            #   # 检查 'instances' 是否非空
+            #   if frame['instances']:
+            #     # 选择置信度最高的关键点组及其对应的置信度分数
+            #     selected_keypoints, selected_scores = select_keypoints_with_highest_confidence(frame['instances'])
+            #     # 格式化关键点数据
+            #     keypoints = [
+            #         [keypoint[0], keypoint[1], score]
+            #         for keypoint, score in zip(selected_keypoints, selected_scores)
+            #     ]
+            #     formatted_data.append(keypoints)
                 # 只取第一组关键点
                 # instance = frame['instances'][0]
                 # keypoints = [
@@ -203,38 +258,45 @@ def run(cfg,
                 #   for keypoint, score in zip(instance['keypoints'], instance['keypoint_scores'])
                 # ]
                 # formatted_data.append(keypoints)
-              else:
-                # 如果 'instances' 为空，可以添加一个空列表或者其他占位符
-                formatted_data.append([])
-            input_keypoints = np.array(formatted_data)
+            #   else:
+            #     # 如果 'instances' 为空，可以添加一个空列表或者其他占位符
+            #     formatted_data.append([])
+            # input_keypoints = np.array(formatted_data)
+            
             # print(input_keypoints)
             # print(input_keypoints.shape)
-            # input_keypoints = dataset.tracking_results[_id]['keypoints']
-            results[_id]['keypoints_rtm'] = input_keypoints
-            pred = smplify.fit(pred_before, input_keypoints, **kwargs)
+            input_keypoints_rtm = dataset_rtm.tracking_results_rtm[_id]['keypoints']
+            # results[_id]['keypoints_rtm'] = input_keypoints
+            pred_rtm = smplify.fit(pred_rtm, input_keypoints_rtm, **kwargs)
             
             with torch.no_grad():
-                network_before.pred_pose = pred['pose']
-                network_before.pred_shape = pred['betas']
-                network_before.pred_cam = pred['cam']
-                output = network_before.forward_smpl(**kwargs)
-                pred = network_before.refine_trajectory(output, cam_angvel, return_y_up=True)
+                network_rtm.pred_pose = pred_rtm['pose']
+                network_rtm.pred_shape = pred_rtm['betas']
+                network_rtm.pred_cam = pred_rtm['cam']
+                output_rtm = network_rtm.forward_smpl(**kwargs)
+                pred_rtm = network_rtm.refine_trajectory(output_rtm, cam_angvel, return_y_up=True)
 
-        pred_body_pose_rtm = matrix_to_axis_angle(pred['poses_body']).cpu().numpy().reshape(-1, 69)
-        pred_root_rtm = matrix_to_axis_angle(pred['poses_root_cam']).cpu().numpy().reshape(-1, 3)
-        pred_root_world_rtm = matrix_to_axis_angle(pred['poses_root_world']).cpu().numpy().reshape(-1, 3)
+        pred_body_pose_rtm = matrix_to_axis_angle(pred_rtm['poses_body']).cpu().numpy().reshape(-1, 69)
+        pred_root_rtm = matrix_to_axis_angle(pred_rtm['poses_root_cam']).cpu().numpy().reshape(-1, 3)
+        pred_root_world_rtm = matrix_to_axis_angle(pred_rtm['poses_root_world']).cpu().numpy().reshape(-1, 3)
         pred_pose_rtm = np.concatenate((pred_root_rtm, pred_body_pose_rtm), axis=-1)
         pred_pose_world_rtm = np.concatenate((pred_root_world_rtm, pred_body_pose_rtm), axis=-1)
-        pred_trans_rtm = (pred['trans_cam'] - network_before.output.offset).cpu().numpy()
+        pred_trans_rtm = (pred_rtm['trans_cam'] - network_rtm.output.offset).cpu().numpy()
+
+        pred_contact_rtm = pred_rtm['contact'].cpu().squeeze().numpy()
+        pred_keypoints_rtm = tracking_results_rtm[_id]['keypoints']
         
         results[_id]['pose_rtm'] = pred_pose_rtm
         results[_id]['trans_rtm'] = pred_trans_rtm
         results[_id]['pose_world_rtm'] = pred_pose_world_rtm
-        results[_id]['trans_world_rtm'] = pred['trans_world'].cpu().squeeze(0).numpy()
-        results[_id]['betas_rtm'] = pred['betas'].cpu().squeeze(0).numpy()
-        results[_id]['verts_rtm'] = (pred['verts_cam'] + pred['trans_cam'].unsqueeze(1)).cpu().numpy()
+        results[_id]['trans_world_rtm'] = pred_rtm['trans_world'].cpu().squeeze(0).numpy()
+        results[_id]['betas_rtm'] = pred_rtm['betas'].cpu().squeeze(0).numpy()
+        results[_id]['verts_rtm'] = (pred_rtm['verts_cam'] + pred_rtm['trans_cam'].unsqueeze(1)).cpu().numpy()
 
-        smpl_rtm = copy.deepcopy(network_before.smpl)
+        results[_id]['contact_rtm'] = pred_contact_rtm
+        results[_id]['keypoints_rtm'] = pred_keypoints_rtm
+
+        smpl_rtm = copy.deepcopy(network_rtm.smpl)
 
         # if False:
         if args.run_smplify:
@@ -242,36 +304,31 @@ def run(cfg,
             input_keypoints = dataset.tracking_results[_id]['keypoints']
             # print(input_keypoints)
             # print(input_keypoints.shape)
-            pred = smplify.fit(pred_before, input_keypoints, **kwargs)
+            pred_after = smplify.fit(pred_before, input_keypoints, **kwargs)
             
             with torch.no_grad():
-                network.pred_pose = pred['pose']
-                network.pred_shape = pred['betas']
-                network.pred_cam = pred['cam']
+                network.pred_pose = pred_after['pose']
+                network.pred_shape = pred_after['betas']
+                network.pred_cam = pred_after['cam']
                 output = network.forward_smpl(**kwargs)
-                pred = network.refine_trajectory(output, cam_angvel, return_y_up=True)
+                pred_after = network.refine_trajectory(output, cam_angvel, return_y_up=True)
         
         # ========= Store results ========= #
-        pred_body_pose_after = matrix_to_axis_angle(pred['poses_body']).cpu().numpy().reshape(-1, 69)
-        pred_root_after = matrix_to_axis_angle(pred['poses_root_cam']).cpu().numpy().reshape(-1, 3)
-        pred_root_world_after = matrix_to_axis_angle(pred['poses_root_world']).cpu().numpy().reshape(-1, 3)
+        pred_body_pose_after = matrix_to_axis_angle(pred_after['poses_body']).cpu().numpy().reshape(-1, 69)
+        pred_root_after = matrix_to_axis_angle(pred_after['poses_root_cam']).cpu().numpy().reshape(-1, 3)
+        pred_root_world_after = matrix_to_axis_angle(pred_after['poses_root_world']).cpu().numpy().reshape(-1, 3)
         pred_pose_after = np.concatenate((pred_root_after, pred_body_pose_after), axis=-1)
         pred_pose_world_after = np.concatenate((pred_root_world_after, pred_body_pose_after), axis=-1)
-        pred_trans_after = (pred['trans_cam'] - network.output.offset).cpu().numpy()
+        pred_trans_after = (pred_after['trans_cam'] - network.output.offset).cpu().numpy()
         
         results[_id]['pose_after'] = pred_pose_after
         results[_id]['trans_after'] = pred_trans_after
         results[_id]['pose_world_after'] = pred_pose_world_after
-        results[_id]['trans_world_after'] = pred['trans_world'].cpu().squeeze(0).numpy()
-        results[_id]['betas_after'] = pred['betas'].cpu().squeeze(0).numpy()
-        results[_id]['verts_after'] = (pred['verts_cam'] + pred['trans_cam'].unsqueeze(1)).cpu().numpy()
+        results[_id]['trans_world_after'] = pred_after['trans_world'].cpu().squeeze(0).numpy()
+        results[_id]['betas_after'] = pred_after['betas'].cpu().squeeze(0).numpy()
+        results[_id]['verts_after'] = (pred_after['verts_cam'] + pred_after['trans_cam'].unsqueeze(1)).cpu().numpy()
 
-        pred_contact = pred['contact'].cpu().squeeze().numpy()
-        pred_keypoints = tracking_results[_id]['keypoints']
-
-        results[_id]['contact'] = pred_contact
-        results[_id]['keypoints'] = pred_keypoints
-        results[_id]['frame_ids'] = frame_id
+        smpl_after = copy.deepcopy(network.smpl)
     
     if save_pkl:
         joblib.dump(results, osp.join(output_pth, "wham_output.pkl"))
@@ -285,7 +342,7 @@ def run(cfg,
         elif args.run_smplify_rtm:
             from lib.vis.run_vis_cc import run_vis_on_demo_smplify_rtm
             with torch.no_grad():
-                run_vis_on_demo_smplify_rtm(cfg, video, results, output_pth, smpl_before, smpl_rtm, network.smpl, vis_global=run_global)
+                run_vis_on_demo_smplify_rtm(cfg, video, results, output_pth, smpl_before, smpl_after, smpl_rtm, vis_global=run_global)
         else:
             from lib.vis.run_vis_cc import run_vis_on_demo
             with torch.no_grad():
