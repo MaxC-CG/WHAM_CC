@@ -461,13 +461,13 @@ def run_vis_on_demo_smplify_rtm(cfg, video, results, output_pth, smpl_before, sm
         # translation_front = torch.tensor([-0.5, -1, 4])  # Move camera back along y-axis
         # translation_side = torch.tensor([-0.5, -1, 5])  # Move camera right along x-axis
         # test6
-        translation_top = torch.tensor([0, 0, 5])  # Move camera up along z-axis
-        translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
-        translation_side = torch.tensor([0, -1, 5])  # Move camera right along x-axis
+        # translation_top = torch.tensor([0, 0, 5])  # Move camera up along z-axis
+        # translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
+        # translation_side = torch.tensor([0, -1, 5])  # Move camera right along x-axis
         # test7
-        # translation_top = torch.tensor([0, 1, 7])  # Move camera up along z-axis
-        # translation_front = torch.tensor([0, -1, 7])  # Move camera back along y-axis
-        # translation_side = torch.tensor([1, -1, 8])  # Move camera right along x-axis
+        translation_top = torch.tensor([0, 1, 7])  # Move camera up along z-axis
+        translation_front = torch.tensor([0, -1, 7])  # Move camera back along y-axis
+        translation_side = torch.tensor([1, -1, 8])  # Move camera right along x-axis
     
     # build default camera
     default_R, default_T = torch.eye(3), torch.zeros(3)
