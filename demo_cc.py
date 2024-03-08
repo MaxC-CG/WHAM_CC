@@ -98,6 +98,9 @@ def run(cfg,
             slam_results = joblib.load(osp.join(output_pth, 'slam_results.pth'))
             logger.info(f'Already processed data exists at {output_pth} ! Load the data .')
             
+    # print(type(tracking_results))
+    # print(tracking_results)
+
     # Build dataset
     dataset = CustomDataset(cfg, tracking_results, slam_results, width, height, fps)
     
@@ -168,7 +171,29 @@ def run(cfg,
         
         # if False:
         if args.run_smplify_rtm:
-            tracking_results_rtm = 
+            with open(rtm_pre, 'r') as f:
+              data = json.load(f)
+            
+            # 提取并处理关键点数据
+            formatted_data = []
+            for frame in data:
+              # 检查 'instances' 是否非空
+              if frame['instances']:
+                # 只取第一组关键点
+                instance = frame['instances'][0]
+                keypoints = [
+                  [keypoint[0], keypoint[1], score]
+                  for keypoint, score in zip(instance['keypoints'], instance['keypoint_scores'])
+                ]
+                formatted_data.append(keypoints)
+              else:
+                # 如果 'instances' 为空，可以添加一个空列表或者其他占位符
+                formatted_data.append([])
+            input_keypoints = np.array(formatted_data)
+
+            tracking_results_rtm = tracking_results
+            tracking_results_rtm[0]['keypoints'] = input_keypoints
+            # tracking_results_rtm
             
             # Build dataset
             dataset_rtm = CustomDataset(cfg, tracking_results_rtm, slam_results, width, height, fps)
@@ -265,7 +290,7 @@ def run(cfg,
             
             # print(input_keypoints)
             # print(input_keypoints.shape)
-            input_keypoints_rtm = dataset_rtm.tracking_results_rtm[_id]['keypoints']
+            input_keypoints_rtm = dataset_rtm.tracking_results[_id]['keypoints']
             # results[_id]['keypoints_rtm'] = input_keypoints
             pred_rtm = smplify.fit(pred_rtm, input_keypoints_rtm, **kwargs)
             
@@ -342,7 +367,7 @@ def run(cfg,
         elif args.run_smplify_rtm:
             from lib.vis.run_vis_cc import run_vis_on_demo_smplify_rtm
             with torch.no_grad():
-                run_vis_on_demo_smplify_rtm(cfg, video, results, output_pth, smpl_before, smpl_after, smpl_rtm, vis_global=run_global)
+                run_vis_on_demo_smplify_rtm(cfg, video, results, output_pth, smpl_before, smpl_rtm, smpl_after, vis_global=run_global)
         else:
             from lib.vis.run_vis_cc import run_vis_on_demo
             with torch.no_grad():
