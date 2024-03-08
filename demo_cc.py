@@ -7,6 +7,8 @@ from collections import defaultdict
 import cv2
 import torch
 import joblib
+import json
+import copy
 import numpy as np
 from loguru import logger
 from progress.bar import Bar
@@ -29,6 +31,7 @@ except:
 
 def run(cfg,
         video,
+        rtm_pre,
         output_pth,
         network,
         calib=None,
@@ -145,7 +148,9 @@ def run(cfg,
         pred_pose_world_before= np.concatenate((pred_root_world_before, pred_body_pose_before), axis=-1)
         pred_trans_before= (pred['trans_cam'] - network.output.offset).cpu().numpy()
 
-        smpl_before = network.smpl
+        smpl_before = copy.deepcopy(network.smpl)
+        pred_before = copy.deepcopy(pred)
+        network_before = copy.deepcopy(network)
         results[_id]['pose_before'] = pred_pose_before
         results[_id]['trans_before'] = pred_trans_before
         results[_id]['pose_world_before'] = pred_pose_world_before
@@ -154,10 +159,90 @@ def run(cfg,
         results[_id]['verts_before'] = (pred['verts_cam'] + pred['trans_cam'].unsqueeze(1)).cpu().numpy()        
         
         # if False:
+        if args.run_smplify_rtm:
+            smplify = TemporalSMPLify(network_before.smpl, img_w=width, img_h=height, device=cfg.DEVICE)
+            with open(rtm_pre, 'r') as f:
+              data = json.load(f)
+
+            def select_keypoints_with_highest_confidence(instances):
+              highest_confidence = 0
+              selected_keypoints = None
+              selected_scores = None
+              for instance in instances:
+                total_confidence = sum(instance['keypoint_scores'])
+                if total_confidence > highest_confidence:
+                  highest_confidence = total_confidence
+                  selected_keypoints = instance['keypoints']
+                  selected_scores = instance['keypoint_scores']
+              return selected_keypoints, selected_scores
+            # formatted_data = [
+            #   [
+            #     [keypoint[0], keypoint[1], score]
+            #     for keypoint, score in zip(instance['keypoints'], instance['keypoint_scores'])
+            #   ]
+            #   for frame in data
+            #   for instance in frame['instances']
+            # ]
+            # 提取并处理关键点数据
+            formatted_data = []
+            for frame in data:
+              # 检查 'instances' 是否非空
+              if frame['instances']:
+                # 选择置信度最高的关键点组及其对应的置信度分数
+                selected_keypoints, selected_scores = select_keypoints_with_highest_confidence(frame['instances'])
+                # 格式化关键点数据
+                keypoints = [
+                    [keypoint[0], keypoint[1], score]
+                    for keypoint, score in zip(selected_keypoints, selected_scores)
+                ]
+                formatted_data.append(keypoints)
+                # 只取第一组关键点
+                # instance = frame['instances'][0]
+                # keypoints = [
+                #   [keypoint[0], keypoint[1], score]
+                #   for keypoint, score in zip(instance['keypoints'], instance['keypoint_scores'])
+                # ]
+                # formatted_data.append(keypoints)
+              else:
+                # 如果 'instances' 为空，可以添加一个空列表或者其他占位符
+                formatted_data.append([])
+            input_keypoints = np.array(formatted_data)
+            # print(input_keypoints)
+            # print(input_keypoints.shape)
+            # input_keypoints = dataset.tracking_results[_id]['keypoints']
+            results[_id]['keypoints_rtm'] = input_keypoints
+            pred = smplify.fit(pred_before, input_keypoints, **kwargs)
+            
+            with torch.no_grad():
+                network_before.pred_pose = pred['pose']
+                network_before.pred_shape = pred['betas']
+                network_before.pred_cam = pred['cam']
+                output = network_before.forward_smpl(**kwargs)
+                pred = network_before.refine_trajectory(output, cam_angvel, return_y_up=True)
+
+        pred_body_pose_rtm = matrix_to_axis_angle(pred['poses_body']).cpu().numpy().reshape(-1, 69)
+        pred_root_rtm = matrix_to_axis_angle(pred['poses_root_cam']).cpu().numpy().reshape(-1, 3)
+        pred_root_world_rtm = matrix_to_axis_angle(pred['poses_root_world']).cpu().numpy().reshape(-1, 3)
+        pred_pose_rtm = np.concatenate((pred_root_rtm, pred_body_pose_rtm), axis=-1)
+        pred_pose_world_rtm = np.concatenate((pred_root_world_rtm, pred_body_pose_rtm), axis=-1)
+        pred_trans_rtm = (pred['trans_cam'] - network_before.output.offset).cpu().numpy()
+        
+        results[_id]['pose_rtm'] = pred_pose_rtm
+        results[_id]['trans_rtm'] = pred_trans_rtm
+        results[_id]['pose_world_rtm'] = pred_pose_world_rtm
+        results[_id]['trans_world_rtm'] = pred['trans_world'].cpu().squeeze(0).numpy()
+        results[_id]['betas_rtm'] = pred['betas'].cpu().squeeze(0).numpy()
+        results[_id]['verts_rtm'] = (pred['verts_cam'] + pred['trans_cam'].unsqueeze(1)).cpu().numpy()
+
+        smpl_rtm = copy.deepcopy(network_before.smpl)
+
+        # if False:
         if args.run_smplify:
-            smplify = TemporalSMPLify(smpl, img_w=width, img_h=height, device=cfg.DEVICE)
+            smplify = TemporalSMPLify(network.smpl, img_w=width, img_h=height, device=cfg.DEVICE)
             input_keypoints = dataset.tracking_results[_id]['keypoints']
-            pred = smplify.fit(pred, input_keypoints, **kwargs)
+            # print(input_keypoints)
+            # print(input_keypoints.shape)
+            pred = smplify.fit(pred_before, input_keypoints, **kwargs)
             
             with torch.no_grad():
                 network.pred_pose = pred['pose']
@@ -174,15 +259,15 @@ def run(cfg,
         pred_pose_world_after = np.concatenate((pred_root_world_after, pred_body_pose_after), axis=-1)
         pred_trans_after = (pred['trans_cam'] - network.output.offset).cpu().numpy()
         
-        pred_contact = pred['contact'].cpu().squeeze().numpy()
-        pred_keypoints = tracking_results[_id]['keypoints']
-        
         results[_id]['pose_after'] = pred_pose_after
         results[_id]['trans_after'] = pred_trans_after
         results[_id]['pose_world_after'] = pred_pose_world_after
         results[_id]['trans_world_after'] = pred['trans_world'].cpu().squeeze(0).numpy()
         results[_id]['betas_after'] = pred['betas'].cpu().squeeze(0).numpy()
         results[_id]['verts_after'] = (pred['verts_cam'] + pred['trans_cam'].unsqueeze(1)).cpu().numpy()
+
+        pred_contact = pred['contact'].cpu().squeeze().numpy()
+        pred_keypoints = tracking_results[_id]['keypoints']
 
         results[_id]['contact'] = pred_contact
         results[_id]['keypoints'] = pred_keypoints
@@ -197,6 +282,10 @@ def run(cfg,
             from lib.vis.run_vis_cc import run_vis_on_demo_smplify
             with torch.no_grad():
                 run_vis_on_demo_smplify(cfg, video, results, output_pth, smpl_before, network.smpl, vis_global=run_global)
+        elif args.run_smplify_rtm:
+            from lib.vis.run_vis_cc import run_vis_on_demo_smplify_rtm
+            with torch.no_grad():
+                run_vis_on_demo_smplify_rtm(cfg, video, results, output_pth, smpl_before, smpl_rtm, network.smpl, vis_global=run_global)
         else:
             from lib.vis.run_vis_cc import run_vis_on_demo
             with torch.no_grad():
@@ -207,6 +296,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--video', type=str, 
                         default='examples/demo_video.mp4', 
+                        help='input video path or youtube link')
+
+    parser.add_argument('--rtm_pre', type=str, 
+                        default='examples/demo_video.json', 
                         help='input video path or youtube link')
 
     parser.add_argument('--output_pth', type=str, default='output/demo', 
@@ -225,6 +318,9 @@ if __name__ == '__main__':
                         help='Save output as pkl file')
     
     parser.add_argument('--run_smplify', action='store_true',
+                        help='Run Temporal SMPLify for post processing')
+
+    parser.add_argument('--run_smplify_rtm', action='store_true',
                         help='Run Temporal SMPLify for post processing')
 
     args = parser.parse_args()
@@ -248,6 +344,7 @@ if __name__ == '__main__':
     
     run(cfg, 
         args.video, 
+        args.rtm_pre,
         output_pth, 
         network, 
         args.calib, 
