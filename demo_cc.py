@@ -98,8 +98,8 @@ def run(cfg,
             slam_results = joblib.load(osp.join(output_pth, 'slam_results.pth'))
             logger.info(f'Already processed data exists at {output_pth} ! Load the data .')
             
-    # print(type(tracking_results))
-    # print(tracking_results)
+    print(type(tracking_results))
+    print(tracking_results)
 
     # Build dataset
     dataset = CustomDataset(cfg, tracking_results, slam_results, width, height, fps)
@@ -360,14 +360,14 @@ def run(cfg,
      
     # Visualize
     if visualize:
-        if args.run_smplify:
-            from lib.vis.run_vis_cc import run_vis_on_demo_smplify
-            with torch.no_grad():
-                run_vis_on_demo_smplify(cfg, video, results, output_pth, smpl_before, network.smpl, vis_global=run_global)
-        elif args.run_smplify_rtm:
+        if args.run_smplify_rtm:
             from lib.vis.run_vis_cc import run_vis_on_demo_smplify_rtm
             with torch.no_grad():
                 run_vis_on_demo_smplify_rtm(cfg, video, results, output_pth, smpl_before, smpl_rtm, smpl_after, vis_global=run_global)
+        elif args.run_smplify:
+            from lib.vis.run_vis_cc import run_vis_on_demo_smplify
+            with torch.no_grad():
+                run_vis_on_demo_smplify(cfg, video, results, output_pth, smpl_before, network.smpl, vis_global=run_global)
         else:
             from lib.vis.run_vis_cc import run_vis_on_demo
             with torch.no_grad():
