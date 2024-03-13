@@ -14,6 +14,9 @@ from smplx.lbs import vertices2joints
 
 from configs import constants as _C
 
+import cv2
+import matplotlib.pyplot as plt
+
 class SMPL(_SMPL):
     """ Extension of the official SMPL implementation to support more joints """
 
@@ -23,6 +26,9 @@ class SMPL(_SMPL):
         sys.stdout = sys.__stdout__
         
         J_regressor_wham = np.load(_C.BMODEL.JOINTS_REGRESSOR_WHAM)
+        # print(np.shape(J_regressor_wham))
+        J_regressor_coco = np.load(_C.BMODEL.JOINTS_REGRESSOR_COCO)
+        # print(np.shape(np.load(_C.BMODEL.JOINTS_REGRESSOR_FEET)))
         J_regressor_eval = np.load(_C.BMODEL.JOINTS_REGRESSOR_H36M)
         self.register_buffer('J_regressor_wham', torch.tensor(
             J_regressor_wham, dtype=torch.float32))
@@ -90,6 +96,40 @@ class SMPL(_SMPL):
             )
             output.full_joints2d = full_joints2d
             output.full_cam = full_cam.reshape(-1, 3)
+
+            # full_joints2d_np = full_joints2d.cpu().detach().numpy()
+
+            # print(full_joints2d_np.shape)
+
+            # # 打开视频文件
+            # video_path = './examples/test0.mp4'
+            # cap = cv2.VideoCapture(video_path)
+
+            # # 读取第一帧
+            # ret, img = cap.read()
+
+            # # 确保视频文件打开成功，并且读取到了帧
+            # if not ret:
+            #     print("Failed to open video or read frame")
+            # else:
+            #     # 假设 full_joints2d_np 是一个形状为 (1, 177, 31, 2) 的张量
+            #     # 选择第一帧的关节坐标
+            #     frame_index = 0
+            #     keypoints = full_joints2d_np[0, frame_index, :, :]
+
+            #     # 遍历所有关节并在图像上绘制
+            #     for joint in keypoints:
+            #         x, y = int(joint[0]), int(joint[1])  # 获取关节的 x 和 y 坐标
+            #         cv2.circle(img, (x, y), radius=5, color=(0, 255, 0), thickness=-1)  # 在图像上绘制绿色圆点
+
+            #     # 将处理后的图像保存到文件中
+            #     output_path = './output.jpg'
+            #     cv2.imwrite(output_path, img)
+            #     print(f"Saved processed image to {output_path}")
+
+            # # 释放视频捕获对象
+            # cap.release()
+            # return -1
             
         return output
     
@@ -115,6 +155,13 @@ class SMPL(_SMPL):
         smpl_output = super(SMPL, self).forward(*args, **kwargs)
         joints = vertices2joints(self.J_regressor_wham, smpl_output.vertices)
         feet = vertices2joints(self.J_regressor_feet, smpl_output.vertices)
+        basic = vertices2joints(self.J_regressor, smpl_output.vertices)
+
+        selected_basic = basic[:, [10, 11, 22, 23], :]
+        joints = torch.cat([joints, selected_basic], dim=1)
+
+        # print(joints.cpu().detach().numpy().shape)
+        # print(basic.cpu().detach().numpy().shape)
         
         offset = joints[..., [11, 12], :].mean(-2)
         if 'transl' in kwargs:
