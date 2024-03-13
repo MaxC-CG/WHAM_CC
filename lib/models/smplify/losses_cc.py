@@ -16,7 +16,7 @@ def compute_jitter(x):
     return torch.linalg.norm(x[:, 2:] + x[:, :-2] - 2 * x[:, 1:-1], dim=-1)
 
 
-class SMPLifyLoss(torch.nn.Module):
+class SMPLifyLoss_cc(torch.nn.Module):
     def __init__(self, 
                  res,
                  cam_intrinsics,
@@ -40,7 +40,8 @@ class SMPLifyLoss(torch.nn.Module):
         scale = bbox[..., 2:].unsqueeze(-1) * 200.
         
         # Loss 1. Data term
-        pred_keypoints = output.full_joints2d[..., :17, :]
+        pred_keypoints = torch.cat([output.full_joints2d[..., :17, :], 
+                    output.full_joints2d[..., 30:34, :]], dim=-2)
         joints_conf = input_keypoints[..., -1:]
         reprojection_error = gmof(pred_keypoints - input_keypoints[..., :-1], sigma)
         reprojection_error = ((reprojection_error * joints_conf) / scale).mean()
