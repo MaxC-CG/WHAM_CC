@@ -191,6 +191,9 @@ def run(cfg,
                 # 如果 'instances' 为空，可以添加一个空列表或者其他占位符
                 formatted_data.append([])
             input_keypoints = np.array(formatted_data)
+            input_keypoints[:, :, 2] *= 0.1
+
+            # print(input_keypoints.shape)
 
             tracking_results_rtm = tracking_results
             tracking_results_rtm[0]['keypoints'] = input_keypoints[:, :17, :]
@@ -331,7 +334,7 @@ def run(cfg,
         results[_id]['verts_rtm'] = (pred_rtm['verts_cam'] + pred_rtm['trans_cam'].unsqueeze(1)).cpu().numpy()
 
         results[_id]['contact_rtm'] = pred_contact_rtm
-        results[_id]['keypoints_rtm'] = pred_keypoints_rtm
+        results[_id]['keypoints_rtm'] = input_keypoints_rtm # pred_keypoints_rtm
 
         smpl_rtm = copy.deepcopy(network_rtm.smpl)
 
@@ -378,6 +381,8 @@ def run(cfg,
     # Visualize
     if visualize:
         if args.run_smplify_rtm:
+            # print(results[0]['keypoints'])
+            # print(results[0]['keypoints_rtm'])
             from lib.vis.run_vis_cc import run_vis_on_demo_smplify_rtm
             with torch.no_grad():
                 run_vis_on_demo_smplify_rtm(cfg, video, results, output_pth, smpl_before, smpl_rtm, smpl_after, vis_global=run_global)
