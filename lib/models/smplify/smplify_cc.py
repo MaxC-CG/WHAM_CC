@@ -3,9 +3,9 @@ import torch
 from tqdm import tqdm
 
 from lib.models import build_body_model
-from .losses import SMPLifyLoss
+from .losses_cc import SMPLifyLoss_cc
 
-class TemporalSMPLify():
+class TemporalSMPLify_cc():
     
     def __init__(self, 
                  smpl=None,
@@ -48,7 +48,7 @@ class TemporalSMPLify():
             max_iter=self.num_iters, 
             line_search_fn='strong_wolfe')
         
-        loss_fn = SMPLifyLoss(init_pose=pose, device=self.device, **kwargs)
+        loss_fn = SMPLifyLoss_cc(init_pose=pose, device=self.device, **kwargs)
         
         closure = loss_fn.create_closure(optimizer,
                        self.smpl, 
