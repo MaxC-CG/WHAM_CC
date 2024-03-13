@@ -50,9 +50,9 @@ def run_vis_on_demo(cfg, video, results, output_pth, smpl, vis_global=True):
 
         # Define custom translation matrices for top, front, and side views
         # test0
-        # translation_top = torch.tensor([0, 0, 5])  # Move camera up along z-axis
-        # translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
-        # translation_side = torch.tensor([0, -1, 5])  # Move camera right along x-axis
+        translation_top = torch.tensor([0, 0, 5])  # Move camera up along z-axis
+        translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
+        translation_side = torch.tensor([0, -1, 5])  # Move camera right along x-axis
         # test1
         # translation_top = torch.tensor([0, 0, 5])  # Move camera up along z-axis
         # translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
@@ -78,9 +78,9 @@ def run_vis_on_demo(cfg, video, results, output_pth, smpl, vis_global=True):
         # translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
         # translation_side = torch.tensor([0, -1, 5])  # Move camera right along x-axis
         # test7
-        translation_top = torch.tensor([0, 1, 7])  # Move camera up along z-axis
-        translation_front = torch.tensor([0, -1, 7])  # Move camera back along y-axis
-        translation_side = torch.tensor([1, -1, 8])  # Move camera right along x-axis
+        # translation_top = torch.tensor([0, 1, 7])  # Move camera up along z-axis
+        # translation_front = torch.tensor([0, -1, 7])  # Move camera back along y-axis
+        # translation_side = torch.tensor([1, -1, 8])  # Move camera right along x-axis
    
     
     # build default camera
@@ -308,6 +308,16 @@ def run_vis_on_demo_smplify(cfg, video, results, output_pth, smpl_before, smpl, 
                     # cv2.circle(img_keypoints, (int(x), int(y)), radius, color, -1)  # Draw the circle
                     color = (0, 255, 0) if idx == 15 and left_foot_prob > right_foot_prob else (0, 255, 0) if idx == 16 and right_foot_prob > left_foot_prob else (255, 0, 0)
                     cv2.circle(img_keypoints, (int(x), int(y)), radius, color, -1)  # Draw the circle
+            # if 'full_joints_wham' in val:
+            #     keypoints = val['full_joints_wham'].reshape(-1, 3)
+
+            #     for idx, joint in enumerate(keypoints):
+            #         x, y, confidence = joint
+            #         radius = int(max(1, confidence * 20))  # Scale the radius based on confidence
+            #         color = (0, 0, 255)
+            #         cv2.circle(img_keypoints, (int(x), int(y)), radius, color, -1)  # Draw the circle
+
+
 
         # Render global views
         if vis_global:
@@ -437,9 +447,9 @@ def run_vis_on_demo_smplify_rtm(cfg, video, results, output_pth, smpl_before, sm
 
         # Define custom translation matrices for top, front, and side views
         # test0
-        # translation_top = torch.tensor([0, 0, 5])  # Move camera up along z-axis
-        # translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
-        # translation_side = torch.tensor([0, -1, 5])  # Move camera right along x-axis
+        translation_top = torch.tensor([0, 0, 5])  # Move camera up along z-axis
+        translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
+        translation_side = torch.tensor([0, -1, 5])  # Move camera right along x-axis
         # test1
         # translation_top = torch.tensor([0, 0, 5])  # Move camera up along z-axis
         # translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
@@ -465,9 +475,9 @@ def run_vis_on_demo_smplify_rtm(cfg, video, results, output_pth, smpl_before, sm
         # translation_front = torch.tensor([0, -1, 5])  # Move camera back along y-axis
         # translation_side = torch.tensor([0, -1, 5])  # Move camera right along x-axis
         # test7
-        translation_top = torch.tensor([0, 1, 7])  # Move camera up along z-axis
-        translation_front = torch.tensor([0, -1, 7])  # Move camera back along y-axis
-        translation_side = torch.tensor([1, -1, 8])  # Move camera right along x-axis
+        # translation_top = torch.tensor([0, 1, 7])  # Move camera up along z-axis
+        # translation_front = torch.tensor([0, -1, 7])  # Move camera back along y-axis
+        # translation_side = torch.tensor([1, -1, 8])  # Move camera right along x-axis
     
     # build default camera
     default_R, default_T = torch.eye(3), torch.zeros(3)
