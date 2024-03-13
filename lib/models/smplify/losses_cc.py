@@ -43,7 +43,13 @@ class SMPLifyLoss_cc(torch.nn.Module):
         pred_keypoints = torch.cat([output.full_joints2d[..., :17, :], 
                     output.full_joints2d[..., 30:34, :]], dim=-2)
         joints_conf = input_keypoints[..., -1:]
+
+        end_weight_factor = 5
+        end_joints_weight = torch.ones_like(joints_conf)
+        end_joints_weight[..., 30:34, :] *= end_weight_factor
+
         reprojection_error = gmof(pred_keypoints - input_keypoints[..., :-1], sigma)
+        reprojection_error_weighted = reprojection_error * end_joints_weight
         reprojection_error = ((reprojection_error * joints_conf) / scale).mean()
         
         # Loss 2. Regularization term
