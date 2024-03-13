@@ -21,6 +21,7 @@ from lib.models import build_network, build_body_model
 from lib.models.preproc.detector import DetectionModel
 from lib.models.preproc.extractor import FeatureExtractor
 from lib.models.smplify import TemporalSMPLify
+from lib.models.smplify import TemporalSMPLify_cc
 
 try: 
     from lib.models.preproc.slam import SLAMModel
@@ -98,8 +99,8 @@ def run(cfg,
             slam_results = joblib.load(osp.join(output_pth, 'slam_results.pth'))
             logger.info(f'Already processed data exists at {output_pth} ! Load the data .')
             
-    print(type(tracking_results))
-    print(tracking_results)
+    # print(type(tracking_results))
+    # print(tracking_results)
 
     # Build dataset
     dataset = CustomDataset(cfg, tracking_results, slam_results, width, height, fps)
@@ -192,7 +193,7 @@ def run(cfg,
             input_keypoints = np.array(formatted_data)
 
             tracking_results_rtm = tracking_results
-            tracking_results_rtm[0]['keypoints'] = input_keypoints
+            tracking_results_rtm[0]['keypoints'] = input_keypoints[:, :17, :]
             # tracking_results_rtm
             
             # Build dataset
@@ -240,7 +241,7 @@ def run(cfg,
                         pred_rtm = network_rtm(x, inits, features, mask=mask, init_root=init_root, cam_angvel=cam_angvel, return_y_up=True, **kwargs)
             
             # smplify = TemporalSMPLify(network_before.smpl, img_w=width, img_h=height, device=cfg.DEVICE)
-            smplify = TemporalSMPLify(network_rtm.smpl, img_w=width, img_h=height, device=cfg.DEVICE)
+            smplify_cc = TemporalSMPLify_cc(network_rtm.smpl, img_w=width, img_h=height, device=cfg.DEVICE)
             # with open(rtm_pre, 'r') as f:
             #   data = json.load(f)
 
@@ -290,9 +291,20 @@ def run(cfg,
             
             # print(input_keypoints)
             # print(input_keypoints.shape)
-            input_keypoints_rtm = dataset_rtm.tracking_results[_id]['keypoints']
+            # input_keypoints_rtm = dataset_rtm.tracking_results[_id]['keypoints']
             # results[_id]['keypoints_rtm'] = input_keypoints
-            pred_rtm = smplify.fit(pred_rtm, input_keypoints_rtm, **kwargs)
+            input_keypoints_rtm = input_keypoints[:, :17, :]
+
+            mean_lf = input_keypoints[:, 17:20, :].mean(axis=1, keepdims=True)
+            input_keypoints_rtm = np.concatenate((input_keypoints_rtm, mean_lf), axis=1)
+            mean_rf = input_keypoints[:, 20:23, :].mean(axis=1, keepdims=True)
+            input_keypoints_rtm = np.concatenate((input_keypoints_rtm, mean_rf), axis=1)
+            mean_lh = input_keypoints[:, [90, 95, 99, 103, 107], :].mean(axis=1, keepdims=True)
+            input_keypoints_rtm = np.concatenate((input_keypoints_rtm, mean_lh), axis=1)
+            mean_rh = input_keypoints[:, [112, 117, 121, 125, 129], :].mean(axis=1, keepdims=True)
+            input_keypoints_rtm = np.concatenate((input_keypoints_rtm, mean_rh), axis=1)
+
+            pred_rtm = smplify_cc.fit(pred_rtm, input_keypoints_rtm, **kwargs)
             
             with torch.no_grad():
                 network_rtm.pred_pose = pred_rtm['pose']
@@ -338,6 +350,9 @@ def run(cfg,
                 output = network.forward_smpl(**kwargs)
                 pred_after = network.refine_trajectory(output, cam_angvel, return_y_up=True)
         
+        # print(network.smpl.get_output().joints.cpu().detach().numpy().shape)
+        # print(pred_after['pose'])
+
         # ========= Store results ========= #
         pred_body_pose_after = matrix_to_axis_angle(pred_after['poses_body']).cpu().numpy().reshape(-1, 69)
         pred_root_after = matrix_to_axis_angle(pred_after['poses_root_cam']).cpu().numpy().reshape(-1, 3)
@@ -346,6 +361,8 @@ def run(cfg,
         pred_pose_world_after = np.concatenate((pred_root_world_after, pred_body_pose_after), axis=-1)
         pred_trans_after = (pred_after['trans_cam'] - network.output.offset).cpu().numpy()
         
+        # results[_id]['full_joints_wham'] = network.smpl.get_output().joints.cpu().detach().numpy()[-1]
+        # print(results[_id]['full_joints_wham'])
         results[_id]['pose_after'] = pred_pose_after
         results[_id]['trans_after'] = pred_trans_after
         results[_id]['pose_world_after'] = pred_pose_world_after
