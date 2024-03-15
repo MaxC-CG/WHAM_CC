@@ -18,9 +18,9 @@ class TemporalSMPLify_cc():
                  ):
         
         self.smpl = smpl
-        self.lr = lr
-        self.num_iters = num_iters
-        self.num_steps = num_steps
+        self.lr = 1e-4
+        self.num_iters = 1
+        self.num_steps = 1000
         self.img_w = img_w
         self.img_h = img_h
         self.device = device
@@ -34,7 +34,7 @@ class TemporalSMPLify_cc():
         betas = init_pred['betas'].detach().cpu().numpy()
         cam = init_pred['cam'].detach().cpu().numpy()
         keypoints = torch.from_numpy(keypoints).float().unsqueeze(0).to(self.device)
-        
+
         BN = pose.shape[1]
         lr = self.lr
         
@@ -42,11 +42,18 @@ class TemporalSMPLify_cc():
         params = [to_params(pose), to_params(betas), to_params(cam)]
         optim_params = [params[2]]
         
-        optimizer = torch.optim.LBFGS(
-            optim_params, 
-            lr=lr, 
-            max_iter=self.num_iters, 
-            line_search_fn='strong_wolfe')
+        # optimizer = torch.optim.LBFGS(
+        #     optim_params, 
+        #     lr=lr, 
+        #     max_iter=self.num_iters, 
+        #     line_search_fn='strong_wolfe')
+
+        optimizer = torch.optim.Adam(
+            optim_params,
+            lr=lr,
+            betas=(0.9, 0.999),
+            eps=1e-08,
+            weight_decay=0)
         
         loss_fn = SMPLifyLoss_cc(init_pose=pose, device=self.device, **kwargs)
         
@@ -64,11 +71,18 @@ class TemporalSMPLify_cc():
                 
         
         # Stage 2. Optimize all params
-        optimizer = torch.optim.LBFGS(
-            params, 
-            lr=lr * BN, 
-            max_iter=self.num_iters, 
-            line_search_fn='strong_wolfe')
+        # optimizer = torch.optim.LBFGS(
+        #     params, 
+        #     lr=lr * BN, 
+        #     max_iter=self.num_iters, 
+        #     line_search_fn='strong_wolfe')
+
+        optimizer = torch.optim.Adam(
+            params,
+            lr=lr * BN,
+            betas=(0.9, 0.999),
+            eps=1e-08,
+            weight_decay=0)
         
         for j in (j_bar := tqdm(range(self.num_steps), leave=False)):
             optimizer.zero_grad()
