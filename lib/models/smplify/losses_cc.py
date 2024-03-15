@@ -34,23 +34,29 @@ class SMPLifyLoss_cc(torch.nn.Module):
     def forward(self, output, params, input_keypoints, bbox, 
                 reprojection_weight=100., regularize_weight=60.0, 
                 consistency_weight=10.0, sprior_weight=0.04, 
-                smooth_weight=20.0, sigma=100):
+                smooth_weight=50.0, sigma=100):
         
         pose, shape, cam = params
         scale = bbox[..., 2:].unsqueeze(-1) * 200.
-        
+
         # Loss 1. Data term
         pred_keypoints = torch.cat([output.full_joints2d[..., :17, :], 
                     output.full_joints2d[..., 30:34, :]], dim=-2)
         joints_conf = input_keypoints[..., -1:]
+        # joints_conf *= 1.1
 
-        end_weight_factor = 5
-        end_joints_weight = torch.ones_like(joints_conf)
-        end_joints_weight[..., 30:34, :] *= end_weight_factor
+        end_weight_factor = 1.2
+        midium_weight_factor = 1
+        joints_weight = torch.ones_like(joints_conf)
+        joints_weight[..., 17:21, :] *= end_weight_factor
+        joints_weight[..., 7:9, :] *= midium_weight_factor
+        joints_weight[..., 13:15, :] *= midium_weight_factor
+
+        # print(end_joints_weight)
 
         reprojection_error = gmof(pred_keypoints - input_keypoints[..., :-1], sigma)
-        reprojection_error_weighted = reprojection_error * end_joints_weight
-        reprojection_error = ((reprojection_error * joints_conf) / scale).mean()
+        reprojection_error_weighted = reprojection_error * joints_weight
+        reprojection_error = ((reprojection_error_weighted * joints_conf) / scale).mean()
         
         # Loss 2. Regularization term
         regularize_error = torch.linalg.norm(pose - self.init_pose, dim=-1).mean()
@@ -85,7 +91,7 @@ class SMPLifyLoss_cc(torch.nn.Module):
         def closure():
             optimizer.zero_grad()
             output = smpl(*params, cam_intrinsics=self.cam_intrinsics, bbox=bbox, res=self.res)
-            
+
             loss_dict = self.forward(output, params, input_keypoints, bbox)
             loss = sum(loss_dict.values())
             loss.backward()
