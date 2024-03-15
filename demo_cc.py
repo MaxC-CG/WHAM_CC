@@ -302,7 +302,7 @@ def run(cfg,
             input_keypoints_rtm = np.concatenate((input_keypoints_rtm, mean_lf), axis=1)
             mean_rf = input_keypoints[:, 20:23, :].mean(axis=1, keepdims=True)
             input_keypoints_rtm = np.concatenate((input_keypoints_rtm, mean_rf), axis=1)
-            mean_lh = input_keypoints[:, [90, 95, 99, 103, 107], :].mean(axis=1, keepdims=True)
+            mean_lh = input_keypoints[:, [91, 96, 100, 104, 108], :].mean(axis=1, keepdims=True)
             input_keypoints_rtm = np.concatenate((input_keypoints_rtm, mean_lh), axis=1)
             mean_rh = input_keypoints[:, [112, 117, 121, 125, 129], :].mean(axis=1, keepdims=True)
             input_keypoints_rtm = np.concatenate((input_keypoints_rtm, mean_rh), axis=1)
