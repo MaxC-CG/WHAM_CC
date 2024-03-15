@@ -97,7 +97,7 @@ class SMPL(_SMPL):
             output.full_joints2d = full_joints2d
             output.full_cam = full_cam.reshape(-1, 3)
 
-            # full_joints2d_np = full_joints2d.cpu().detach().numpy()
+            full_joints2d_np = full_joints2d.cpu().detach().numpy()
 
             # print(full_joints2d_np.shape)
 
@@ -112,15 +112,27 @@ class SMPL(_SMPL):
             # if not ret:
             #     print("Failed to open video or read frame")
             # else:
-            #     # 假设 full_joints2d_np 是一个形状为 (1, 177, 31, 2) 的张量
-            #     # 选择第一帧的关节坐标
             #     frame_index = 0
             #     keypoints = full_joints2d_np[0, frame_index, :, :]
 
+            #     # 定义两种颜色，一种用于前17个点，另一种用于其他点
+            #     color_first_17 = (0, 255, 0)  # 绿色
+            #     color_others = (255, 0, 0)    # 蓝色
+
             #     # 遍历所有关节并在图像上绘制
-            #     for joint in keypoints:
-            #         x, y = int(joint[0]), int(joint[1])  # 获取关节的 x 和 y 坐标
-            #         cv2.circle(img, (x, y), radius=5, color=(0, 255, 0), thickness=-1)  # 在图像上绘制绿色圆点
+            #     for i, joint in enumerate(keypoints):
+            #         x, y = int(joint[0]), int(joint[1])
+            #         if i == 10:
+            #             cv2.circle(img, (x, y), radius=5, color=color_first_17, thickness=-1)
+            #         elif i == 33:
+            #             cv2.circle(img, (x, y), radius=5, color=color_others, thickness=-1)
+
+            #     points = [(100, 100), (200, 200), (300, 300), (400, 400)]
+
+            #     # 在图像上绘制点
+            #     for point in points:
+            #         x, y = point
+            #         cv2.circle(img, (x, y), radius=10, color=(0, 0, 255), thickness=-1)
 
             #     # 将处理后的图像保存到文件中
             #     output_path = './output.jpg'
@@ -157,7 +169,7 @@ class SMPL(_SMPL):
         feet = vertices2joints(self.J_regressor_feet, smpl_output.vertices)
         basic = vertices2joints(self.J_regressor, smpl_output.vertices)
 
-        selected_basic = basic[:, [10, 11, 22, 23], :]
+        selected_basic = basic[:, [11, 10, 23, 22], :]
         joints = torch.cat([joints, selected_basic], dim=1)
 
         # print(joints.cpu().detach().numpy().shape)
