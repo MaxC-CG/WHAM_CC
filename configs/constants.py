@@ -40,6 +40,7 @@ class BMODEL:
     SMPLX2SMPL = f'{root}/body_models/smplx2smpl.pkl'
     FACES = f'{root}/body_models/smpl_faces.npy'
     MEAN_PARAMS = f'{root}/body_models/smpl_mean_params.npz'
+    JOINTS_REGRESSOR_COCO = f'{root}/body_models/J_regressor_coco.npy'
     JOINTS_REGRESSOR_WHAM = f'{root}/body_models/J_regressor_wham.npy'
     JOINTS_REGRESSOR_H36M = f'{root}/body_models/J_regressor_h36m.npy'
     JOINTS_REGRESSOR_EXTRA = f'{root}/body_models/J_regressor_extra.npy'
