@@ -101,11 +101,11 @@ def process_mixamo():
     for key, val in processed_data.items():
         processed_data[key] = np.concatenate(val)
 
-    joblib.dump(processed_data, _C.PATHS.AMASS_LABEL)
+    joblib.dump(processed_data, 'dataset/parsed_data/mixamo.pth')
     print('\nDone!')
 
 if __name__ == '__main__':
-    out_path = 'dataset/parsed_data/mixamo.pth'
+    out_path = 'dataset/parsed_data'
     os.makedirs(out_path, exist_ok=True)
     
     process_mixamo()
