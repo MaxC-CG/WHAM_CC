@@ -20,10 +20,16 @@ class BaseDataset(torch.utils.data.Dataset):
         self.keypoints_normalizer = Normalizer(cfg)
 
     def prepare_video_batch(self):
+        if isinstance(self.labels['vid'], list):
+          self.labels['vid'] = np.array(self.labels['vid'])
         r = self.epoch % 4
 
         self.video_indices = []
         vid_name = self.labels['vid']
+        # vid_name = np.array(self.labels['vid'])
+        # print(self.labels['vid'])
+        # print(type(self.labels['vid']))
+        # print(1)
         if isinstance(vid_name, torch.Tensor): vid_name = vid_name.numpy()
         video_names_unique, group = np.unique(
             vid_name, return_index=True)
@@ -31,6 +37,7 @@ class BaseDataset(torch.utils.data.Dataset):
         group_perm = group[perm]
         indices = np.split(
             np.arange(0, self.labels['vid'].shape[0]), group_perm[1:]
+            # np.arange(0, vid_name.shape[0]), group_perm[1:]
         )
         for idx in range(len(video_names_unique)):
             indexes = indices[idx]
