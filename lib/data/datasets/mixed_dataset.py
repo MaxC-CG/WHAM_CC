@@ -49,13 +49,26 @@ class DataFactory(torch.utils.data.Dataset):
     def __len__(self):
         return int(np.array([l for l, r in zip(self.lengths, self.ratio) if r > 0]).mean())
 
+    # def __getitem__(self, index):
+    #     # Get the dataset to sample from
+    #     p = np.random.rand()
+    #     for i in range(len(self.datasets)):
+    #         if p <= self.partition[i]:
+    #             if len(self.datasets) == 1:
+    #                 return self.datasets[i][index % self.lengths[i]]
+    #             else:
+    #                 d_index = np.random.randint(0, self.lengths[i])
+    #                 return self.datasets[i][d_index]
     def __getitem__(self, index):
-        # Get the dataset to sample from
-        p = np.random.rand()
-        for i in range(len(self.datasets)):
-            if p <= self.partition[i]:
-                if len(self.datasets) == 1:
-                    return self.datasets[i][index % self.lengths[i]]
-                else:
-                    d_index = np.random.randint(0, self.lengths[i])
-                    return self.datasets[i][d_index]
+      # Get the dataset to sample from
+      p = np.random.rand()
+      for i in range(len(self.datasets)):
+          if p <= self.partition[i]:
+              if len(self.datasets) == 1:
+                  return self.datasets[i][index % self.lengths[i]]
+              else:
+                  if self.lengths[i] > 0:  # Check if the length is greater than 0
+                      d_index = np.random.randint(0, self.lengths[i])
+                      return self.datasets[i][d_index]
+                  else:
+                      continue  # Skip this dataset if the length is 0
