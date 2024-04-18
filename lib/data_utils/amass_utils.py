@@ -59,9 +59,14 @@ def process_amass():
                 
                 # Skip if the sequence is too short
                 if num_frames < 25: continue
-                
+                  
                 # Get SMPL groundtruth from MoSh fitting
-                pose = map_dmpl_to_smpl(torch.from_numpy(data['poses'][::retain_freq]).float())
+                if seq == "Mixamo_Aug_Double":
+                  pose = torch.from_numpy(data['poses'][::retain_freq]).float()
+                  pose = pose.reshape(pose.shape[0], -1, 3)
+                else:  
+                  pose = map_dmpl_to_smpl(torch.from_numpy(data['poses'][::retain_freq]).float())
+                
                 transl = torch.from_numpy(data['trans'][::retain_freq]).float()
                 betas = torch.from_numpy(
                     np.repeat(data['betas'][:10][np.newaxis], pose.shape[0], axis=0)).float()
