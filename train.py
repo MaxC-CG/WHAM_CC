@@ -55,12 +55,31 @@ def main(cfg):
         momentum=cfg.TRAIN.MOMENTUM,
         stage=cfg.TRAIN.STAGE)
     
-    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
-        optimizer,
-        milestones=cfg.TRAIN.MILESTONES,
-        gamma=cfg.TRAIN.LR_DECAY_RATIO,
-        verbose=False,
-    )
+    # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
+    #     optimizer,
+    #     milestones=cfg.TRAIN.MILESTONES,
+    #     gamma=cfg.TRAIN.LR_DECAY_RATIO,
+    #     verbose=False,
+    # )
+    # 修改学习率调度器配置
+    if cfg.TRAIN.END_EPOCH == 10:
+        # Warm-up for the first 3 epochs, then decay
+        warm_up_epochs = 3
+        peak_lr = cfg.TRAIN.LR
+        base_lr = peak_lr * 0.1  # Start from a lower LR and warm up to the peak
+        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer,
+            lr_lambda=lambda epoch: (epoch / warm_up_epochs) * (peak_lr / base_lr) if epoch < warm_up_epochs 
+                                    else peak_lr * (cfg.TRAIN.LR_DECAY_RATIO ** ((epoch - warm_up_epochs) // 2))
+        )
+    else:
+        # Existing scheduler setup
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            optimizer,
+            milestones=cfg.TRAIN.MILESTONES,
+            gamma=cfg.TRAIN.LR_DECAY_RATIO,
+            verbose=False,
+        )
     
     # ========= Loss function ========= #
     criterion = WHAMLoss(cfg, cfg.DEVICE)
