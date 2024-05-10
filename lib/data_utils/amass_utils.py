@@ -25,6 +25,10 @@ def process_amass():
     zup2ydown = torch.Tensor(
         [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
     ).unsqueeze(0).float()
+
+    yup2ydown = torch.Tensor(
+        [[1, 0, 0], [0, -1, 0], [0, 0, -1]]
+    ).unsqueeze(0).float()
     
     smpl_dict = {'male': SMPL(model_path=_C.BMODEL.FLDR, gender='male'), 
                  'female': SMPL(model_path=_C.BMODEL.FLDR, gender='female'),
@@ -59,20 +63,20 @@ def process_amass():
                 
                 # Skip if the sequence is too short
                 if num_frames < 25: continue
+
+                transl = torch.from_numpy(data['trans'][::retain_freq]).float()
                   
                 # Get SMPL groundtruth from MoSh fitting
                 if seq == "Mixamo_Aug_Double":
                   pose = torch.from_numpy(data['poses'][::retain_freq]).float()
                   pose = pose.reshape(pose.shape[0], -1, 3)
-                else:  
+                  pose, transl = transform_global_coordinate(pose, yup2ydown, transl)
+                else:
                   pose = map_dmpl_to_smpl(torch.from_numpy(data['poses'][::retain_freq]).float())
+                  # Convert Z-up coordinate to Y-down
+                  pose, transl = transform_global_coordinate(pose, zup2ydown, transl)
                 
-                transl = torch.from_numpy(data['trans'][::retain_freq]).float()
-                betas = torch.from_numpy(
-                    np.repeat(data['betas'][:10][np.newaxis], pose.shape[0], axis=0)).float()
-                
-                # Convert Z-up coordinate to Y-down
-                pose, transl = transform_global_coordinate(pose, zup2ydown, transl)
+                betas = torch.from_numpy(np.repeat(data['betas'][:10][np.newaxis], pose.shape[0], axis=0)).float()
                 pose = pose.reshape(-1, 72)
                 
                 # Create SMPL mesh
